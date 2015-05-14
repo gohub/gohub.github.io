@@ -1,0 +1,31 @@
+{
+  "name": "gohub.github.io",
+  "version": "1.4.2",
+  "description": "Github pages for translations of Golang documents",
+  "main": "index.js",
+  "scripts": {
+    "test": "gulp"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gohub/gohub.github.io"
+  },
+  "keywords": [
+    "godoc",
+    "golang"
+  ],
+  "author": {
+    "name": "YU HengChun",
+    "url": "https://github.com/achun"
+  },
+  "contributors": [],
+  "license": "BSD",
+  "bugs": {
+    "url": "https://github.com/gohub/gohub.github.io/issues"
+  },
+  "homepage": "https://github.com/gohub/gohub.github.io",
+  "devDependencies": {
+    "gulp": "^3.8.11",
+    "gulp-live-server": "0.0.14"
+  }
+}
