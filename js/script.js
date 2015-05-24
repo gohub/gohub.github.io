@@ -13,16 +13,14 @@
 
 	$(function() {
 		marked.setOptions({
-			highlight: function(code, lang) {
-				var out = hljs.highlightAuto(code, [lang])
-				return out.value
-			}
+			highlight: gh.hljs
 		})
 
 		$brand = $('.gh-brand')
 		$index = $('.gh-index')
 		$content = $('.gh-content')
-		repo.show('/README.md').done(
+
+		repo.show('/golist.json').done(
 			$(window).on('click', dispatch)
 		)
 	})
@@ -50,14 +48,14 @@
 		if (role == "repo") {
 			setTimeout(function() {
 				gh(href).done(function(rep, textStatus, jqXHR) {
-					global.repo=repo = rep
+					global.repo = repo = rep
 					repo.show('golist.json')
 				})
 			}, 0)
 		}
-		if (role=="gopackage"){
+		if (role == "gopackage") {
 			setTimeout(function() {
-				repo.show("src/"+href+"/doc_zh_CN.go")
+				repo.show("src/" + href + "/doc_zh_CN.go")
 			}, 0)
 		}
 		return false

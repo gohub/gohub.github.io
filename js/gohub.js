@@ -213,6 +213,8 @@
 		// 
 		// ready 在 deferred.then 中转化原数据并向后传递. 转化后的对象属性为:
 		// 
+		// 	url       数据来源 URL
+		// 	filename  URL 中以 "/" 分割的最后一部分
 		// 	raw       ready 接收到的数据
 		// 	content   转换数据, 初始值等于 raw. 由 gh.transformer 中的方法进行转换
 		//    type      content 的类型, 由 gh.transformer 中注册的方法进行设置
@@ -243,10 +245,11 @@
 		};
 
 		var data = {
+				url: this.url,
 				raw: d,
 				content: d
 			},
-			file = this.url.slice(this.url.lastIndexOf('/') + 1),
+			file = data.filename = this.url.slice(this.url.lastIndexOf('/') + 1),
 			ext = file.slice(file.lastIndexOf('.') + 1);
 
 		data.type = trans[file] ? file : trans[ext] ? ext : false;
@@ -293,6 +296,19 @@
 			$(cfg.content).empty().append(data.content)
 		}
 	}
+
+	gh.hljs = function(code, lang) {
+		// Gohub 默认代码着色调用 hljs.highlightAuto.
+		return hljs.highlightAuto(code, lang && [lang] || []).value
+	}
+
+	$(function() {
+		gh.settings = gh.settings || gh.bare()
+		gh.settings.index = gh.settings.index || '.gh-index';
+		gh.settings.brand = gh.settings.index || '.gh-brand';
+		gh.settings.content = gh.settings.content || '.gh-content';
+	})
+
 })(jQuery, this);
 
 (function($, global) {
@@ -306,9 +322,97 @@
 		data.type = "html"
 	}
 
+
 	trans.go = function(data) {
-		data.content = data.content
+		// Golang 文件渲染, 调用 gh.GoParse 进行解析.
+		// GoParse 解析的结果保存于 data.gopkg.
+
+		var root = $(),
+			pkg = data.gopkg = gh.GoParse(data.content),
+			trans = data.filename.slice(0, 4) == 'doc_' ? null : 'translation';
+
+		data.content = root
 		data.type = "html"
+
+		root.push(
+			$('<h2>').text('package ' + pkg.name)[0]
+		)
+
+		p(pkg)
+
+		pkg.consts && pkg.consts.length && root.push(
+			$('<h3>').text('Constants')[0]
+		) && pkg.consts.forEach(function(decl) {
+			code(decl)
+			p(decl)
+		})
+
+		pkg.vars && pkg.vars.length && root.push(
+			$('<h3>').text('Variables')[0]
+		) && pkg.vars.forEach(function(decl) {
+			code(decl)
+			p(decl)
+		})
+
+		pkg.funcs && pkg.funcs.forEach(function(decl) {
+			root.push(
+				$('<h3>').text('func ').append(
+					$('<a>').text(decl.name)
+				)[0]
+			)
+			code(decl)
+			p(decl)
+		})
+
+		$.each(pkg.types, function(_, decl) {
+			root.push(
+				$('<h3>').text('func ').append(
+					$('<a>').text(decl.name)
+				)[0]
+			)
+			code(decl)
+			p(decl)
+
+			decl.funcs && decl.funcs.forEach(function(decl) {
+				root.push(
+					$('<h4>').text('func ').append(
+						$('<a>').text(decl.name)
+					)[0]
+				)
+				code(decl)
+				p(decl)
+			})
+		})
+
+		function p(decl) {
+			// 用 P 标签包裹注释
+			var txt = decl.doc;
+			if (!txt) return;
+			root.push($('<p>').text(comments(txt)).addClass(trans)[0])
+
+			if (!trans || !decl.comments.length) return;
+
+			txt = decl.comments[decl.comments.length - 1]
+			root.push($('<p>').text(comments(txt)).addClass('origin')[0])
+		}
+
+		function code(decl) {
+			var txt = decl.code;
+			if (!txt) return;
+			root.push($('<pre>').html(gh.hljs(txt, ['go']))[0])
+		}
+	}
+
+	function comments(txt) {
+		var offset = 0;
+		return txt.split('\n').map(function(v, i) {
+			var pos = v.search(/\S/)
+			if (pos == -1) return v.slice(offset);
+			if (v[pos]=='*') return v.slice(pos+1);
+			if (v[pos]!='/') return v.slice(offset);
+			return v.slice(pos+2)
+
+		}).join('\n')
 	}
 
 	trans["gorepos.json"] = trans.gorepos_json = function(data) {
@@ -366,7 +470,7 @@
 					$('<h4>').prop('id', id)
 					.append(
 						$('<a>').text(path).attr('href', path)
-						.attr('role','gopackage')
+						.attr('role', 'gopackage')
 					)[0],
 
 					$('<p>').text(list[path])[0]
@@ -403,20 +507,9 @@
 		}
 	};
 
-	$(function() {
-		gh.settings = gh.settings || gh.bare()
-		gh.settings.index = gh.settings.index || '.gh-index';
-		gh.settings.brand = gh.settings.index || '.gh-brand';
-		gh.settings.content = gh.settings.content || '.gh-content';
-	})
-
 })(jQuery, this);
 
 (function($, global) {
-	/**
-	 * Go Doc Parsing
-	 * Go 代码块解析器, 非词法解析. 仅适用于解析格式化后的 Go Doc 文档.
-	 */
 
 	var block = {
 			'p': 'name',
@@ -429,7 +522,7 @@
 		ingore = /[/\*]+ *(\+|copyright|all rights|author)/i,
 		regBlock = /\n(\n\/|[ftvcip])/,
 		regTypeName = / (\w+)/,
-		regFuncName = / (\w+)\(/;
+		regFunc = /func (?:\((?:[\w]+ )?\*?(\w+)(?:\) ))?(\w+)\([^\)]*\)(?: \(?(?:\w+,)*(?:\w )*\*?(\w+))?/;
 
 	var gh = global.GoHub;
 
@@ -439,31 +532,31 @@
 		}
 	}
 
-	gh.parse = function Parser(src) {
+	gh.GoParse = function Parser(src) {
+		/**
+		 * Go Parsing
+		 * Go 简化解析器, 非词法解析. 仅适用于格式化后的 Go 代码.
+		 */
 		var pkg = {
-				//comments: [], // 其他注释
-				//doc: "",
-				//trans: "".
-				//importPath: "",
-				name: [],
+				name: [], // 临时使用数组类型, 后面整理 
+				importPath: "",
+				doc: "", // 文档
+				comments: [], // 其他注释
+				ingores: [], // 非文档部分的注释
 				imports: [],
 				consts: [],
 				vars: [],
 				funcs: [],
-				types: []
+				types: gh.bare()
 			},
 			scope = pkg,
 			comments = [],
-			pos, txt, doc, decl;
+			pos, txt, decl;
 
 		src = src.trim();
 
 		while (src.length) {
 			pos = src.search(regBlock)
-
-			if (src[0] == '/') {
-				doc = src[pos + 1] != '\n' // 有文档
-			}
 
 			if (pos == -1) {
 				txt = src
@@ -478,64 +571,76 @@
 				continue
 			}
 
-			decl = Object.create(null)
+			decl = gh.bare()
 			decl.code = txt
 
-			// 有文档
-			if (doc && (doc = comments.pop())) {
-				if (comments.length) {
-					decl.doc = comments.pop()
-					decl.trans = doc
-				} else {
-					decl.doc = doc
-				}
-			}
-
-			if (comments.length) {
-				decl.comments = comments
-			}
+			// 文档
+			decl.doc = comments.pop()
+			decl.comments = comments
 
 			comments = [];
 
 			txt = block[txt[0]]
 
-			if (txt == 'funcs') {
-				decl.name = decl.code.match(regFuncName)[1]
-			}
+			// 缺陷, 尚未分离声明块内的注释
 
 			if (txt == 'types') {
 				decl.name = decl.code.match(regTypeName)[1]
-				pkg[txt] = pkg[txt] || []
-				pkg[txt].push(decl)
-				scope = decl
-			} else {
-				scope[txt] = scope[txt] || []
-				scope[txt].push(decl)
+				pkg.types[decl.name] = decl
+				continue
 			}
+			scope = pkg
+			if (txt == 'funcs') {
+				decl.name = decl.code.match(regFunc)
+
+				if (decl.name[1]) {
+					// receiver
+					scope = pkg.types[decl.name[1]] = pkg.types[decl.name[1]] || gh.bare()
+				} else if (decl.name[3] && pkg.types[decl.name[3]]) {
+					// results, 缺陷, 返回类型必须先定义
+					scope = pkg.types[decl.name[3]]
+				}
+				decl.name = decl.name[2]
+			}
+
+			scope[txt] = scope[txt] || []
+			scope[txt].push(decl)
 		}
 
-		// 整理 Name 中的 package 之前的注释到 Doc
+		// package comments
 		decl = pkg.name[0]
 		if (decl.doc)
 			pkg.doc = decl.doc;
-		if (decl.trans)
-			pkg.trans = decl.trans;
-		if (decl.comments)
-			pkg.comments = decl.comments;
 
 		pkg.name = decl.code.slice(8).trim()
 
+		if (decl.comments) {
+			pkg.comments = []
+			pkg.ingores = []
+			decl.comments.forEach(function(txt) {
+				if (isSynopsis(txt)) {
+					pkg.ingores.push(txt)
+				} else {
+					pkg.comments.push(txt)
+				}
+			})
+		}
+
+		// import paths
 		pos = pkg.name.indexOf('/')
 		if (pos != -1) {
 			pkg.importPath = pkg.name.match(/"(.*)"/)[1] // 不含两边的引号
 			pkg.name = pkg.name.slice(0, pos).trim()
 		}
 
-		// 对于 Go Doc, 如果包含 import, 总是以组形式出现.
-		pkg.imports = pkg.imports[0]
-		if (!pkg.imports) {
-			delete pkg.imports
-		}
+		// 整理 import. 总是合并到一个数组.
+		txt = pkg.imports
+		pkg.imports = []
+		txt.forEach(function(decl) {
+			decl.code.match(/"(.*)"/g).forEach(function(path) {
+				pkg.imports.push(path.slice(1, -1))
+			})
+		})
 
 		return pkg
 	};
