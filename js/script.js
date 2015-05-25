@@ -11,6 +11,14 @@
 		console.error(arguments)
 	})
 
+	$(document).ajaxStart(function() {
+		$("#gh-loading").show();
+	});
+
+	$(window).on('GoHub:render',function() {
+		$("#gh-loading").hide();
+	});
+
 	$(function() {
 		marked.setOptions({
 			highlight: gh.hljs
@@ -20,7 +28,7 @@
 		$index = $('.gh-index')
 		$content = $('.gh-content')
 
-		repo.show('/golist.json').done(
+		repo.history('/golist.json').done(
 			$(window).on('click', dispatch)
 		)
 	})
@@ -39,7 +47,7 @@
 
 		// 本地文件以 "/" 开头
 		if (href[0] == '/') {
-			repo.show(href)
+			repo.history(href)
 			return false
 		}
 
@@ -49,19 +57,16 @@
 			setTimeout(function() {
 				gh(href).done(function(rep, textStatus, jqXHR) {
 					global.repo = repo = rep
-					repo.show('golist.json')
+					repo.history('golist.json')
 				})
 			}, 0)
 		}
 		if (role == "gopackage") {
 			setTimeout(function() {
-				repo.show("src/" + href + "/doc_zh_CN.go")
+				repo.history("src/" + href + "/doc_zh_CN.go")
 			}, 0)
 		}
 		return false
 	}
-
-	// 'zh-CN/src/bufio/doc_zh_CN.go'
-	// 'README.md'
 
 })(jQuery, this)

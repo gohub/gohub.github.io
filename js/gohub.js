@@ -96,7 +96,7 @@
 	fn.cdn = function(path) {
 		// 拼接出 repo 相对路径 path 在 http://cdn.rawgit.com 的地址.
 		// 本地模式或者 path 的第一个字符为 "/", 直接返回 path.
-		if (!this.cdn || path[0] == "/")
+		if (!this.cdn || path[0] == "/" || path.indexOf(this.cdn) == 0)
 			return path
 
 		return this.cdn + '/' + path
@@ -163,7 +163,7 @@
 	};
 
 	fn.show = function(path) {
-		// 便捷方法. 完成获取从 rawgit 获取 path 对应的文件, 并渲染到页面.
+		// 便捷方法. 从获取 path 对应的文件, 渲染到页面.
 		// 等同调用:
 		// 	gh.ready(repo.got(path)).done(gh.render)
 		// 
@@ -275,7 +275,7 @@
 		return data
 	}
 
-	gh.render = function(data, textStatus, jqXHR) {
+	gh.render = function(data) {
 		// GoHub 默认渲染, 需要显示调用.
 		// 示例:
 		// 	repo.ready(deferred).done(gh.render)
@@ -284,6 +284,7 @@
 		// 默认值分别为 css 选择器:
 		// 	".gh-brand",".gh-index",".gh-content"
 		// 调用者可自行配置.
+		// 
 		var cfg = gh.settings
 
 		if (data.brand && cfg.brand) {
@@ -295,6 +296,8 @@
 		if (data.content && cfg.content) {
 			$(cfg.content).empty().append(data.content)
 		}
+
+		$(window).triggerHandler("GoHub:render", [data])
 	}
 
 	gh.hljs = function(code, lang) {
@@ -312,6 +315,52 @@
 })(jQuery, this);
 
 (function($, global) {
+	// HTML5 history
+	var gh = global.GoHub,
+		cache = [],
+		history = global.history,
+		support = history && history.pushState && history.replaceState &&
+		!global.navigator.userAgent.match(/((iPod|iPhone|iPad).+\bOS\s+[1-4]\D|WebApps\/.+CFNetwork)/);
+
+	gh.prototype.history = function(path) {
+		// 调用 gh.show(path), 如果浏览器支持 HTML5 history, 应用 HTML5 history.
+		// 如果 path 已经被 cache, 直接渲染.
+		// 此 history 暂不改变地址栏. 缺陷, 直接更改地址栏,会产生历史混乱.
+		var dfd, pos = -1;
+		if (!support)
+			return this.show(path)
+		cache.some(function(data, i) {
+			if (data.history == path) {
+				pos = i
+				return true
+			}
+		})
+		if (pos == -1) {
+			pos = history.state || 0
+			return this.show(path).done(function(data) {
+				data.history = path
+				cache = cache.slice(0, pos + 1)
+				history.pushState(cache.length)
+				cache.push(data)
+			})
+		}
+		cache = cache.slice(0, pos + 1)
+		history.pushState(cache.length)
+		return $.when(cache[pos])
+	}
+
+	$(function() {
+		$(window).on('popstate', function() {
+			var pos = history.state
+			if (pos == null || pos >= cache.length) return;
+			history.replaceState(pos)
+			gh.render(cache[pos])
+		})
+	})
+
+})(jQuery, this);
+
+(function($, global) {
 	// GoHub 数据转换
 	// 所有的转换器的参数都是一个最终对象, 直接把结果附加上去.
 	var gh = global.GoHub,
@@ -324,12 +373,16 @@
 
 
 	trans.go = function(data) {
-		// Golang 文件渲染, 调用 gh.GoParse 进行解析.
-		// GoParse 解析的结果保存于 data.gopkg.
+		// Golang 文件渲染, 调用 gh.GoParse 进行解析, 解析的结果保存于 data.gopkg.
+		// 对照翻译判定
+		// 	文件名为 'doc_*.go' 格式的进行对照翻译判定.
+		// 	如果存在包文档翻译则判定是对照翻译.
+		// 	如果声明文档只有一份, 表示缺少翻译, 为保证兼容以原文替代翻译.
 
 		var root = $(),
 			pkg = data.gopkg = gh.GoParse(data.content),
-			trans = data.filename.slice(0, 4) == 'doc_' ? null : 'translation';
+			trans = data.filename.slice(0, 4) == 'doc_' &&
+			pkg.comments.length ? 'translation' : null;
 
 		data.content = root
 		data.type = "html"
@@ -366,7 +419,7 @@
 
 		$.each(pkg.types, function(_, decl) {
 			root.push(
-				$('<h3>').text('func ').append(
+				$('<h3>').text('type ').append(
 					$('<a>').text(decl.name)
 				)[0]
 			)
@@ -385,34 +438,44 @@
 		})
 
 		function p(decl) {
-			// 用 P 标签包裹注释
-			var txt = decl.doc;
-			if (!txt) return;
-			root.push($('<p>').text(comments(txt)).addClass(trans)[0])
+			// 使用 P 标签包裹注释, PRE 标签包裹缩进和 ':' 后的段落.
+			var tag;
+			if (!decl.doc) return;
+			if (trans) {
+				gh.Godoc(decl.comments[decl.comments.length - 1] || decl.doc).forEach(function(txt) {
+					if (txt[0] == '\t' || txt[0] == ' ') {
+						txt = txt.replace(RegExp('^' + txt.match(/^\s+/)[0], 'gm'), '')
+						tag = '<pre>'
+					} else if (txt && txt[0] == txt[0].toUpperCase() && !txt.match(/[,:\.，：。]/)) {
+						tag = '<h3>'
+					} else {
+						tag = '<p>'
+					}
 
-			if (!trans || !decl.comments.length) return;
+					root.push($(tag).text(txt).addClass('origin')[0])
+				})
+			}
 
-			txt = decl.comments[decl.comments.length - 1]
-			root.push($('<p>').text(comments(txt)).addClass('origin')[0])
+			gh.Godoc(decl.doc).forEach(function(txt) {
+				if (txt[0] == '\t' || txt[0] == ' ') {
+					txt = txt.replace(RegExp('^' + txt.match(/^\s+/)[0], 'gm'), '')
+					tag = '<pre>'
+				} else if (txt && txt[0] == txt[0].toUpperCase() && !txt.match(/[,:\.，：。]/)) {
+					tag = '<h3>'
+				} else {
+					tag = '<p>'
+				}
+
+				root.push($(tag).text(txt).addClass(trans)[0])
+			})
 		}
 
 		function code(decl) {
+			// 使用 pre 标签包裹代码
 			var txt = decl.code;
 			if (!txt) return;
-			root.push($('<pre>').html(gh.hljs(txt, ['go']))[0])
+			root.push($('<pre class="lang-go">').html(gh.hljs(txt, ['go']))[0])
 		}
-	}
-
-	function comments(txt) {
-		var offset = 0;
-		return txt.split('\n').map(function(v, i) {
-			var pos = v.search(/\S/)
-			if (pos == -1) return v.slice(offset);
-			if (v[pos]=='*') return v.slice(pos+1);
-			if (v[pos]!='/') return v.slice(offset);
-			return v.slice(pos+2)
-
-		}).join('\n')
 	}
 
 	trans["gorepos.json"] = trans.gorepos_json = function(data) {
@@ -510,7 +573,7 @@
 })(jQuery, this);
 
 (function($, global) {
-
+	// 解析相关
 	var block = {
 			'p': 'name',
 			'i': 'imports',
@@ -519,7 +582,7 @@
 			't': 'types',
 			'f': 'funcs'
 		},
-		ingore = /[/\*]+ *(\+|copyright|all rights|author)/i,
+		ingore = /[\/\*]+\s*(\+|copyright|all rights|author|go:)/i,
 		regBlock = /\n(\n\/|[ftvcip])/,
 		regTypeName = / (\w+)/,
 		regFunc = /func (?:\((?:[\w]+ )?\*?(\w+)(?:\) ))?(\w+)\([^\)]*\)(?: \(?(?:\w+,)*(?:\w )*\*?(\w+))?/;
@@ -534,8 +597,8 @@
 
 	gh.GoParse = function Parser(src) {
 		/**
-		 * Go Parsing
-		 * Go 简化解析器, 非词法解析. 仅适用于格式化后的 Go 代码.
+		 * Go 源码解析器精简版, 非词法解析. 仅适用于格式化后的 Go 代码.
+		 * 返回类似 go/doc.Package 结构对象. 该对象可以逆向生成 src
 		 */
 		var pkg = {
 				name: [], // 临时使用数组类型, 后面整理 
@@ -644,5 +707,57 @@
 
 		return pkg
 	};
+
+	gh.Godoc = function(comments) {
+		// Golang 注释风格文档解析提取.
+		// 参数 comments 为一段格式化的注释原文.
+		// 返回注释文本数组 [comment, ...],  该数组适用于渲染, 不能逆向到注释源码.
+		// 该注释文本去除注释前导符号和排版空格, 以独立的空行进行分割.
+		// 注释间非空行的换行符号被保留.
+		var indent, style, pos,
+			trimLeft = 0,
+			ret = [],
+			doc = [];
+
+		comments = comments.split('\n')
+
+		// 分析注释风格, 过滤前部空白注释
+		comments.some(function(v, i) {
+			pos = v.search(/\S/)
+			if (!i) {
+				style = v[pos + 1] // '/' || '*'
+				trimLeft = style == '/' && pos + 2 || 0
+			}
+
+			if (!trimLeft) {
+				trimLeft = v.slice(pos + 1).search(/[^\/\*]/)
+				if (trimLeft == -1) {
+					trimLeft = 0
+					return
+				}
+				trimLeft += pos + 1
+			}
+			pos = i
+			return true
+		})
+
+		if (style == '*') comments.pop()
+
+		comments.slice(pos).forEach(function(v) {
+			v = v.slice(trimLeft).trimRight()
+			if (v) {
+				v = v[0] == ' ' ? v.slice(1) : v
+				doc.push(v)
+			} else {
+				ret.push(doc.join('\n'))
+				doc = []
+			}
+		})
+		if (doc.length) {
+			ret.push(doc.join('\n'))
+		}
+
+		return ret;
+	}
 
 })(jQuery, this);
