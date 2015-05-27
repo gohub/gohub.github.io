@@ -31,20 +31,23 @@
 		var info = gh.bare();
 		repo = (repo || "").split('/')
 		info.repo = repo.slice(0, 2).join('/')
+		info.root = ''
 		info.base = repo.slice(2).join('/')
 
 		repo = new Repo(info)
-		if (!arguments.length) {
+		repo.base(info.base)
+		if (!arguments.length || info.repo.indexOf('/') == -1) {
 			return repo
 		}
 
-		return $.when(
-			$.get(apiRepos + '/' + info.repo).done(repo.init),
-			$.get(apiRepos + '/' + info.repo + '/releases/latest').done(repo.init)
-
-		).fail(repo.fail).then(function() {
-			return repo
-		})
+		return $.when($.get(apiRepos + '/' + info.repo + '/releases/latest'))
+			.then(
+				function(data) {
+					info.tag_name = data.tag_name
+					info.root = [rawgit, info.repo, info.tag_name].join("/")
+					return repo
+				},
+				repo.fail)
 	};
 
 	// 辅助函数
@@ -80,60 +83,72 @@
 	// Repo
 
 	function Repo(info) {
-		// 重新绑定 .info, .init, .cdn 到 info 对象
+		// 重新绑定 .info, .readme, .cdn 到 info 对象
 		this.info = this.info.bind(info)
 		this.cdn = this.cdn.bind(info)
-		this.init = info.repo ? this.init.bind(info) : noop;
+		this.readme = this.readme.bind(info);
+		this.base = this.base.bind(info);
+		info.self = self.bind(this)
+	}
+
+	function self() {
+		return this
 	}
 
 	gh.prototype = fn;
 
 	fn.info = function() {
 		// 返回该 repo 的信息对象副本, 该信息对象使用闭包保存, 禁止改写.
+		// 该对象具有成员
+		// 	repo     仓库 full_name.
+		// 	tag_name 仓库最新 tag_name.
+		// 	readme   仓库 readme.
+		// 	root     获取文档相对根路径对应的 Rawgit CDN 地址.
+		// 	base     获取文档基础路径, 以 '/' 开头和结尾.
+		// 	self()   返回 Repo 对象.
 		return Object.create(this)
 	};
+
+	fn.base = function(basedir) {
+		// 返回文档基础路径. 如果指定 basedir, 设置 basedir 为基础路径.
+		if (typeof basedir == 'string') {
+			if (basedir[0] != '/') {
+				basedir = '/' + basedir
+			}
+			if (basedir[basedir.length - 1] != '/') {
+				basedir += '/'
+			}
+			this.base = basedir;
+		}
+		return this.base
+	}
 
 	fn.cdn = function(path) {
 		// 拼接出 repo 相对路径 path 在 http://cdn.rawgit.com 的地址.
 		// 本地模式或者 path 的第一个字符为 "/", 直接返回 path.
-		if (!this.cdn || path[0] == "/" || path.indexOf(this.cdn) == 0)
+		if (!path) return this.root ? this.root + this.base : ''
+		if (!this.root || path[0] == "/" || path.indexOf(this.root) == 0)
 			return path
 
-		return this.cdn + '/' + path
-	}
-
-	fn.init = function(data, textStatus, jqXHR) {
-		// 此方法仅在初始化对象时被调用, 提取 GitHub API 相应数据合并到 repo.info().
-
-		if (data.full_name && !this.full_name) {
-			this.full_name = data.full_name
-			if (data.source) {
-				this.source = data.source.full_name
-			}
-		};
-
-		if (data.tag_name && !this.tag_name) {
-			this.tag_name = data.tag_name
-		}
-		if (!this.cdn && this.full_name && this.tag_name) {
-			this.cdn = [rawgit, this.repo, this.tag_name].join("/")
-		}
-		if (data.content && !this.readme) {
-			this.readme = Base64.decode(data.content)
-		}
+		return this.root + this.base + path
 	}
 
 	fn.readme = function() {
 		// 通过 GitHub API 获取 repo 的 readme 文件内容. 返回 jQuery deferred 对象
 		// 
 		// See: https://developer.github.com/v3/repos/contents/
-		var info = this.info()
+		var info = this
 		if (!info.cdn || info.readme) {
 			return $.when(info.readme)
 		}
 
 		return $.get([apiRepos, info.repo, 'readme'].join('/'))
-			.then(this.init, this.fail)
+			.then(function(data) {
+				if (data.content) {
+					info.readme = Base64.decode(data.content)
+				}
+				return info.readme
+			}, info.self().fail)
 	};
 
 	fn.fail = function(jqXHR, textStatus, errorThrown) {
@@ -173,6 +188,54 @@
 })(jQuery, this);
 
 (function($, global) {
+	// HTML5 history
+	var last, gh = global.GoHub,
+		cache = gh.bare(),
+		history = global.history,
+		support = history && history.pushState && history.replaceState &&
+		!global.navigator.userAgent.match(/((iPod|iPhone|iPad).+\bOS\s+[1-4]\D|WebApps\/.+CFNetwork)/);
+
+	gh.prototype.history = function(path) {
+		// 调用 gh.show(path), 如果浏览器支持 HTML5 history, 应用 HTML5 history.
+		// 如果 path 已经被 cache, 直接渲染.
+		// 此 history 暂不改变地址栏. 缺陷, 直接更改地址栏,会产生历史混乱.
+		// 简单示例:
+		//		$(window).on('popstate', function() {
+		// 		if (repo.cdn()) repo.history(history.state)
+		// 	})
+		var url;
+		if (!path) return;
+
+		if (!support)
+			return this.show(path)
+
+		url = this.cdn(path)
+
+		// onpopstate 有可能再次触发上次的请求
+		if (last == url) return
+
+		if (cache[url]) {
+			last = url
+			if (path != history.state) { // 非 history.go
+				history.pushState(url)
+			}
+			return $.when(gh.ready.call({
+				url: url
+			}, cache[url])).done(gh.render)
+		}
+
+		return this.show(path).done(function(data) {
+			cache[data.url] = data.raw
+			if (last && data.url != history.state) {
+				history.pushState(last)
+			}
+			last = data.url
+			history.replaceState(last)
+		})
+	}
+})(jQuery, this);
+
+(function($, global) {
 	// GoHub 页面渲染相关
 
 	var gh = global.GoHub,
@@ -204,7 +267,7 @@
 		}).join('')
 	};
 
-	gh.ready = function(d, textStatus, jqXHR) {
+	gh.ready = function(d) {
 		// ready 对 Ajax 成功接收到的数据转化为易于页面渲染的对象.
 		// 列举两种等效的调用方法.
 		// 示例:
@@ -232,7 +295,6 @@
 		// 2. 匹配 ajaxSettings.url 中的文件扩展名.
 		//
 		// 后续通过 type 循环匹配, 直到匹配失败或者 type 为 "html" 或者循环次数超出 10.
-		// 如果转化成功, 向后传递转化对象并设置 ajaxSettings.ghReady = true.
 		// gh.transformer 中注册的方法声明为:
 		// 	function (data)
 		// 
@@ -240,8 +302,8 @@
 		// 	$(window).triggerHandler("GoHub:Error:ready", [data])
 		// 	return $.Deferred().reject([data])
 		//  
-		if (arguments.length < 3) {
-			return d.then(this.ready)
+		if (typeof d.then == 'function') {
+			return d.then(gh.ready)
 		};
 
 		var data = {
@@ -271,7 +333,6 @@
 			return $.Deferred().reject([data])
 		}
 
-		this.ghReady = true;
 		return data
 	}
 
@@ -310,52 +371,6 @@
 		gh.settings.index = gh.settings.index || '.gh-index';
 		gh.settings.brand = gh.settings.index || '.gh-brand';
 		gh.settings.content = gh.settings.content || '.gh-content';
-	})
-
-})(jQuery, this);
-
-(function($, global) {
-	// HTML5 history
-	var gh = global.GoHub,
-		cache = [],
-		history = global.history,
-		support = history && history.pushState && history.replaceState &&
-		!global.navigator.userAgent.match(/((iPod|iPhone|iPad).+\bOS\s+[1-4]\D|WebApps\/.+CFNetwork)/);
-
-	gh.prototype.history = function(path) {
-		// 调用 gh.show(path), 如果浏览器支持 HTML5 history, 应用 HTML5 history.
-		// 如果 path 已经被 cache, 直接渲染.
-		// 此 history 暂不改变地址栏. 缺陷, 直接更改地址栏,会产生历史混乱.
-		var dfd, pos = -1;
-		if (!support)
-			return this.show(path)
-		cache.some(function(data, i) {
-			if (data.history == path) {
-				pos = i
-				return true
-			}
-		})
-		if (pos == -1) {
-			pos = history.state || 0
-			return this.show(path).done(function(data) {
-				data.history = path
-				cache = cache.slice(0, pos + 1)
-				history.pushState(cache.length)
-				cache.push(data)
-			})
-		}
-		cache = cache.slice(0, pos + 1)
-		history.pushState(cache.length)
-		return $.when(cache[pos])
-	}
-
-	$(function() {
-		$(window).on('popstate', function() {
-			var pos = history.state
-			if (pos == null || pos >= cache.length) return;
-			history.replaceState(pos)
-			gh.render(cache[pos])
-		})
 	})
 
 })(jQuery, this);
@@ -514,17 +529,28 @@
 			return
 		}
 
-		var items = [],
+		var repo, items = [],
 			list, keys,
 			root = $(),
 			repos = data.content;
 
-
-		// 暂时只支持一个 repo
-
-		for (var repo in repos) {
-			list = repos[repo].list
+		for (var name in repos) {
+			repo = repos[name]
+			list = repo.list
 			keys = Object.keys(list).sort();
+			root.push(
+				$('<h3>').text(name)
+				.data({
+					'type': repo.type,
+					'repo': repo.repo,
+					description: repo.description
+				})[0]
+			)
+			if (repo.description) {
+				root.push(
+					$('<p>').text(repo.description)
+				)
+			}
 
 			keys.forEach(function(path, i) {
 				var id = gh.safeId(path);
