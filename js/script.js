@@ -4,10 +4,7 @@
 	var gh = global.GoHub,
 		repo = global.repo = gh(), // 当前 repo
 		info, // 当前 repo.info()
-		repos = gh.bare(), // cache
-		$brand,
-		$index,
-		$content;
+		repos = gh.bare(); // cache
 
 	$(window).on("GoHub:Error:ready", function() {
 		console.error(arguments)
@@ -26,16 +23,15 @@
 			highlight: gh.hljs
 		})
 
-		$brand = $('.gh-brand')
-		$index = $('.gh-index')
-		$content = $('.gh-content')
-
 		repo.history('/golist.json').done(
 			$(window).on('click', dispatch)
 		)
 
 		$(window).on('popstate', function() {
-			if (repo.cdn()) repo.history(history.state)
+			repo.history()
+		})
+		$('nav button').click(function(){
+			$('.origin').toggleClass('none')
 		})
 	})
 
@@ -53,7 +49,7 @@
 		};
 		var el = $(e.target),
 			href = el.attr('href');
-
+		if (!href) return false;
 		if (href[0] == '#' || href.indexOf(':') > 0 || href.slice(0, 2) == '//') {
 			return
 		}

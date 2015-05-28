@@ -1,12 +1,11 @@
-[class^="wide"]{
-  padding-right: 1rem;
-}
 .wide80{padding-left: 1rem;}
+
 .gh-content pre{background: #e9e9e9; border-radius: 5px;}
 .gh-content h1,
 .gh-content h2,
 .gh-content h3,
 .gh-content h4 {color: #375EAB;}
+
 #gh-loading {
 	width: 100%;
 	height:100%;
@@ -15,3 +14,9 @@
 	background: transparent url("daftpunktocat-thomas.gif") no-repeat center center;
 	background-size: 10rem;
 }
+nav button{background-color: transparent;}
+.none{display: none;}
+.gh-3{text-indent:1rem;}
+.gh-4{text-indent:2rem;}
+.gh-5{text-indent:3rem;}
+.gh-6{text-indent:4rem;}

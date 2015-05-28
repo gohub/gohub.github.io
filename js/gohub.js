@@ -189,48 +189,48 @@
 
 (function($, global) {
 	// HTML5 history
-	var last, gh = global.GoHub,
+	var last = null,
+		gh = global.GoHub,
 		cache = gh.bare(),
 		history = global.history,
 		support = history && history.pushState && history.replaceState &&
 		!global.navigator.userAgent.match(/((iPod|iPhone|iPad).+\bOS\s+[1-4]\D|WebApps\/.+CFNetwork)/);
 
+	history.replaceState(null)
 	gh.prototype.history = function(path) {
-		// 调用 gh.show(path), 如果浏览器支持 HTML5 history, 应用 HTML5 history.
+		// 调用 repo.show(path), 如果浏览器支持 HTML5 history, 应用 HTML5 history.
 		// 如果 path 已经被 cache, 直接渲染.
 		// 此 history 暂不改变地址栏. 缺陷, 直接更改地址栏,会产生历史混乱.
-		// 简单示例:
+		// onpopstate 调用方法:
 		//		$(window).on('popstate', function() {
-		// 		if (repo.cdn()) repo.history(history.state)
+		// 		repo.history() // 不能带参数
 		// 	})
 		var url;
-		if (!path) return;
+		// 此判断兼容 初次调入, onpopstate
+		if (path == last || path == history.state) return;
+		path = path || history.state
 
 		if (!support)
 			return this.show(path)
 
 		url = this.cdn(path)
-
-		// onpopstate 有可能再次触发上次的请求
-		if (last == url) return
-
 		if (cache[url]) {
-			last = url
-			if (path != history.state) { // 非 history.go
-				history.pushState(url)
+			if (path != history.state) {
+				history.pushState(last)
 			}
+			last = url
+			history.replaceState(last)
 			return $.when(gh.ready.call({
 				url: url
 			}, cache[url])).done(gh.render)
 		}
 
 		return this.show(path).done(function(data) {
-			cache[data.url] = data.raw
-			if (last && data.url != history.state) {
+			if (last)
 				history.pushState(last)
-			}
 			last = data.url
 			history.replaceState(last)
+			cache[last] = data.raw
 		})
 	}
 })(jQuery, this);
@@ -239,11 +239,14 @@
 	// GoHub 页面渲染相关
 
 	var gh = global.GoHub,
-		trans = gh.transformer = gh.transformer || gh.bare();
-
-
-	var _source = "\t !\"#$%&'()*+,./:;<=>?@[\\]^`{|}~",
+		trans = gh.transformer = gh.transformer || gh.bare(),
+		_source = "\t !\"#$%&'()*+,./:;<=>?@[\\]^`{|}~",
 		_target = "﹏░¡″♯＄％＆′﹙﹚×＋，·╱∶；＜＝＞¿＠［╲］∧ˋ﹛¦﹜∽";
+
+	gh.settings = gh.bare()
+	gh.settings.index = '.gh-index';
+	gh.settings.brand = '.gh-brand';
+	gh.settings.content = '.gh-content';
 
 	gh.safeId = function(raw) {
 		// 转换文字可用作 id, 如果以数字开头, 附加前缀 "•"
@@ -286,7 +289,7 @@
 		// 		[{
 		// 			href: "#id",
 		// 			text: "Getting started",
-		//    		level: 0,
+		//    		level: 1,
 		//    	}]
 		//
 		// ready 循环调用 gh.transformer 中注册的方法. 初次匹配顺序为:
@@ -351,8 +354,35 @@
 		if (data.brand && cfg.brand) {
 			$(cfg.brand).empty().append(data.brand)
 		}
+
+		if (cfg.index) {
+			gh.list(data)
+		}
+
 		if (data.index && cfg.index) {
-			$(cfg.index).empty().append(data.index)
+			var dl, c = $(cfg.index).empty();
+
+			$.each(data.index, function(i, item) {
+				var level = item.level,
+					text = typeof item.text == 'string' ? [item.text] : item.text.slice(0);
+
+				i = item.href && $('<a>').prop('href', item.href) || $('<span>')
+				i.text(text.pop())
+
+				if (level == 1) {
+					dl = $('<dl>')
+					c.append(dl)
+				}
+				if (level > 6) level = 6
+				text.forEach(function(txt) {
+					if (txt) {
+						dl.append($('<dt>').addClass('gh-' + level).append($('<span>').text(txt)))
+					}
+					if (level < 6)
+						level++
+				})
+				dl && dl.append($('<dd>').addClass('gh-' + level).append(i))
+			})
 		}
 		if (data.content && cfg.content) {
 			$(cfg.content).empty().append(data.content)
@@ -366,12 +396,39 @@
 		return hljs.highlightAuto(code, lang && [lang] || []).value
 	}
 
-	$(function() {
-		gh.settings = gh.settings || gh.bare()
-		gh.settings.index = gh.settings.index || '.gh-index';
-		gh.settings.brand = gh.settings.index || '.gh-brand';
-		gh.settings.content = gh.settings.content || '.gh-content';
-	})
+	gh.list = function(data, filter) {
+		// 当参数 data.type 为 'html' 且 data.index 为假时, 
+		// list 分析 data.content 中的 H1...H6 标签对内容进行编目索引.
+		// 参数 filter(el) bool 是过滤函数, 用于过滤元素 el.
+		var hx,
+			items = [],
+			ids = gh.bare(),
+			counter = 1;
+		if (data.index || data.type != 'html') return;
+
+		$(data.content).each(function(i, el) {
+			if (!el.nodeName.match(/^H[123456]$/) || filter && !filter(el)) return;
+			i = parseInt(el.nodeName.slice(1))
+			if (hx == null) hx = i - 1;
+
+			var item = {
+				text: el.textContent,
+				level: i - hx
+			}
+
+			var id = gh.safeId(item.text),
+				c = '';
+			while (ids[id + c]) {
+				c = counter++
+			}
+			id = id + c
+			ids[id] = 1
+			$(el).attr('id', id)
+			item.href = '#' + id
+			items.push(item)
+		})
+		data.index = items
+	}
 
 })(jQuery, this);
 
@@ -382,7 +439,7 @@
 		trans = gh.transformer = gh.transformer || gh.bare();
 
 	trans.md = trans.readme = function(data) {
-		data.content = global.marked(data.content)
+		data.content = $(global.marked(data.content))
 		data.type = "html"
 	}
 
@@ -394,7 +451,7 @@
 		// 	如果存在包文档翻译则判定是对照翻译.
 		// 	如果声明文档只有一份, 表示缺少翻译, 为保证兼容以原文替代翻译.
 
-		var root = $(),
+		var root = [],
 			pkg = data.gopkg = gh.GoParse(data.content),
 			trans = data.filename.slice(0, 4) == 'doc_' &&
 			pkg.comments.length ? 'translation' : null;
@@ -495,7 +552,7 @@
 
 	trans["gorepos.json"] = trans.gorepos_json = function(data) {
 		// Go reops JSON 格式列表渲染到 HTML
-		var root = $(),
+		var root = [],
 			list = data.content;
 
 		if (!$.isArray(list)) {
@@ -531,7 +588,7 @@
 
 		var repo, items = [],
 			list, keys,
-			root = $(),
+			root = [],
 			repos = data.content;
 
 		for (var name in repos) {
@@ -564,36 +621,30 @@
 
 					$('<p>').text(list[path])[0]
 				)
-
-				// 计算 index
-				var last = path.lastIndexOf('/')
-				var item = {
-					href: '#' + id,
-					text: path.slice(last + 1)
-				}
-
-				path = path.slice(0, last)
-
-				while (path.length) {
-					id = keys.lastIndexOf(path, i--)
-					if (id != -1) break
-
-					path = path.slice(0, path.lastIndexOf('/'))
-				}
-
-				items.push(item)
-
-				item.level = id == -1 ? 0 : items[id].level + 1;
-
 			})
 		}
 
 		data.content = root
 		data.type = "html"
+		gh.list(data)
+		keys = gh.bare()
+		data.index.forEach(function(item) {
+			var txt = item.text.split('/')
+			keys[item.text] = 1
+			if (txt.length == 1) {
+				return
+			}
 
-		if (!data.index && items.length) {
-			data.index = items
-		}
+			item.text = txt.slice(0)
+
+			for (var i = 1; i < txt.length; i++) {
+				var k = txt.slice(0, i).join('/')
+				if (keys[k]) {
+					item.text[i - 1] = ''
+				}
+				keys[k] = 1 // 倒序逐级
+			}
+		})
 	};
 
 })(jQuery, this);
