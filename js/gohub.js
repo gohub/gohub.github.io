@@ -551,7 +551,7 @@
 					if (txt[0] == '\t' || txt[0] == ' ') {
 						txt = txt.replace(RegExp('^' + txt.match(/^\s+/)[0], 'gm'), '')
 						tag = '<pre>'
-					} else if (i && i != max && txt.indexOf('\n') == -1 &&
+					} else if (tag && tag != '<h3>' && i != max && txt.indexOf('\n') == -1 &&
 						txt[0] == txt[0].toUpperCase() && !txt.match(/[,:\.，：。]/)) {
 						tag = '<h3>'
 					} else {
@@ -560,6 +560,7 @@
 
 					root.push($(tag).text(txt).addClass('origin')[0])
 				})
+				tag = ''
 			}
 
 			comments = gh.Godoc(decl.doc)
@@ -569,7 +570,7 @@
 				if (txt[0] == '\t' || txt[0] == ' ') {
 					txt = txt.replace(RegExp('^' + txt.match(/^\s+/)[0], 'gm'), '')
 					tag = '<pre>'
-				} else if (i && i != max && txt.indexOf('\n') == -1 &&
+				} else if (tag && tag != '<h3>' && i != max && txt.indexOf('\n') == -1 &&
 					txt[0] == txt[0].toUpperCase() && !txt.match(/[,:\.，：。]/)) {
 					tag = '<h3>'
 				} else {
