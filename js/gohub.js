@@ -473,10 +473,14 @@
 	trans.go = function(data) {
 		// Golang 文件渲染, 调用 gh.GoParse 进行解析, 解析的结果保存于 data.gopkg.
 		// 对照翻译判定
+		//
 		// 	文件名为 'doc_*.go' 格式的进行对照翻译判定.
 		// 	如果存在包文档翻译则判定是对照翻译.
 		// 	如果声明文档只有一份, 表示缺少翻译, 为保证兼容以原文替代翻译.
-
+		//
+		// Golang 风格文档规则参见:
+		//
+		// https://github.com/golang-china/golangdoc.translations/wiki/Rules-of-godoc-documenting
 		var root = [],
 			pkg = data.gopkg = gh.GoParse(data.content),
 			trans = data.filename.slice(0, 4) == 'doc_' &&
@@ -537,14 +541,18 @@
 
 		function p(decl) {
 			// 使用 P 标签包裹注释, PRE 标签包裹缩进和 ':' 后的段落.
-			var tag;
+			var tag, comments, max;
 			if (!decl.doc) return;
 			if (trans) {
-				gh.Godoc(decl.comments[decl.comments.length - 1] || decl.doc).forEach(function(txt) {
+				comments = gh.Godoc(decl.comments[decl.comments.length - 1] || decl.doc)
+				max = comments.length - 1
+				comments.forEach(function(txt, i) {
+					if (!txt) return
 					if (txt[0] == '\t' || txt[0] == ' ') {
 						txt = txt.replace(RegExp('^' + txt.match(/^\s+/)[0], 'gm'), '')
 						tag = '<pre>'
-					} else if (txt && txt[0] == txt[0].toUpperCase() && !txt.match(/[,:\.，：。]/)) {
+					} else if (i && i != max && txt.indexOf('\n') == -1 &&
+						txt[0] == txt[0].toUpperCase() && !txt.match(/[,:\.，：。]/)) {
 						tag = '<h3>'
 					} else {
 						tag = '<p>'
@@ -554,11 +562,15 @@
 				})
 			}
 
-			gh.Godoc(decl.doc).forEach(function(txt) {
+			comments = gh.Godoc(decl.doc)
+			max = comments.length - 1
+			comments.forEach(function(txt, i) {
+				if (!txt) return
 				if (txt[0] == '\t' || txt[0] == ' ') {
 					txt = txt.replace(RegExp('^' + txt.match(/^\s+/)[0], 'gm'), '')
 					tag = '<pre>'
-				} else if (txt && txt[0] == txt[0].toUpperCase() && !txt.match(/[,:\.，：。]/)) {
+				} else if (i && i != max && txt.indexOf('\n') == -1 &&
+					txt[0] == txt[0].toUpperCase() && !txt.match(/[,:\.，：。]/)) {
 					tag = '<h3>'
 				} else {
 					tag = '<p>'
