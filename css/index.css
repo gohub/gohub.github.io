@@ -5,6 +5,9 @@
 .gh-content h2,
 .gh-content h3,
 .gh-content h4 {color: #375EAB;}
+.gh-content img{max-width: 100%}
+.gh-index {padding-right: 1rem;}
+.gh-index dl{white-space: pre; overflow: auto;}
 
 #gh-loading {
 	width: 100%;

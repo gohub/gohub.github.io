@@ -1,4 +1,10 @@
-[{
-	"repo": "golang-china/golangdoc.translations",
-	"description": "Go std 包文档中文翻译"
-}]
+[
+	{
+		"repo": "golang-china/golangdoc.translations",
+		"description": "Go std 文档"
+	},
+	{
+		"repo": "gohub/google",
+		"description":"Google Go 文档"
+	}
+]

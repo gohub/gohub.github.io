@@ -7,7 +7,12 @@
 		repos = gh.bare(); // cache
 
 	$(window).on("GoHub:Error:ready", function() {
-		console.error(arguments)
+		$("#gh-loading").hide();
+		console.error("error",arguments)
+	})
+
+	$(window).on("GoHub:fail", function() {
+		$("#gh-loading").hide();
 	})
 
 	$(document).ajaxStart(function() {

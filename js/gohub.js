@@ -83,11 +83,12 @@
 	// Repo
 
 	function Repo(info) {
-		// 重新绑定 .info, .readme, .cdn 到 info 对象
+		// 重新绑定 .info, .readme, .base, .cdn 到 info 对象
 		this.info = this.info.bind(info)
 		this.cdn = this.cdn.bind(info)
-		this.readme = this.readme.bind(info);
+		this.readme = this.readme.bind(info)
 		this.base = this.base.bind(info);
+		this.render = this.render.bind(this);
 		info.self = self.bind(this)
 	}
 
@@ -127,6 +128,10 @@
 		// 拼接出 repo 相对路径 path 在 http://cdn.rawgit.com 的地址.
 		// 本地模式或者 path 的第一个字符为 "/", 直接返回 path.
 		if (!path) return this.root ? this.root + this.base : ''
+		if (path == '/readme') {
+			// 区别本地 README.md 和仓库 readme
+			return !this.root ? '/README.md' : [apiRepos, this.repo, 'readme'].join('/')
+		}
 		if (!this.root || path[0] == "/" || path.indexOf(this.root) == 0)
 			return path
 
@@ -134,21 +139,26 @@
 	}
 
 	fn.readme = function() {
-		// 通过 GitHub API 获取 repo 的 readme 文件内容. 返回 jQuery deferred 对象
+		// 通过 GitHub API 获取并渲染 repo 的 readme 文件. 返回 jQuery deferred 对象.
 		// 
 		// See: https://developer.github.com/v3/repos/contents/
-		var info = this
-		if (!info.cdn || info.readme) {
-			return $.when(info.readme)
+		//
+		// 如果尚未载入 CDN 项目, 调取 /README.me
+		var info = this,
+			self = info.self();
+		if (info.readme) return self.ready($.when(info.readme)).done(self.render)
+		if (!info.repo) {
+			// 本地
+			return self.show('/README.md')
 		}
 
-		return $.get([apiRepos, info.repo, 'readme'].join('/'))
+		return self.ready($.get([apiRepos, info.repo, 'readme'].join('/'))
 			.then(function(data) {
 				if (data.content) {
 					info.readme = Base64.decode(data.content)
 				}
 				return info.readme
-			}, info.self().fail)
+			}, self.fail)).done(self.render)
 	};
 
 	fn.fail = function(jqXHR, textStatus, errorThrown) {
@@ -180,9 +190,9 @@
 	fn.show = function(path) {
 		// 便捷方法. 从获取 path 对应的文件, 渲染到页面.
 		// 等同调用:
-		// 	gh.ready(repo.got(path)).done(gh.render)
+		// 	repo.ready(repo.got(path)).done(repo.render)
 		// 
-		return gh.ready(this.got(path)).done(gh.render)
+		return this.ready(this.got(path)).done(this.render)
 	}
 
 })(jQuery, this);
@@ -220,18 +230,19 @@
 			}
 			last = url
 			history.replaceState(last)
-			return $.when(gh.ready.call({
+			return $.when(this.ready.call({
 				url: url
-			}, cache[url])).done(gh.render)
+			}, cache[url])).done(this.render)
 		}
 
-		return this.show(path).done(function(data) {
-			if (last)
-				history.pushState(last)
-			last = data.url
-			history.replaceState(last)
-			cache[last] = data.raw
-		})
+		return (path == '/readme' ? this.readme() : this.show(path))
+			.done(function(data) {
+				if (last)
+					history.pushState(last)
+				last = data.url
+				history.replaceState(last)
+				cache[last] = data.raw
+			})
 	}
 })(jQuery, this);
 
@@ -270,12 +281,12 @@
 		}).join('')
 	};
 
-	gh.ready = function(d) {
+	gh.prototype.ready = function(d) {
 		// ready 对 Ajax 成功接收到的数据转化为易于页面渲染的对象.
 		// 列举两种等效的调用方法.
 		// 示例:
-		// 	gh.ready(repo.got("your file")).done(callback) // 或者
-		// 	repo.got("your file").then(gh.ready).done(callback) // 必须使用 .then
+		// 	repo.ready(repo.got("your file")).done(callback) // 或者
+		// 	repo.got("your file").then(repo.ready).done(callback) // 必须使用 .then
 		// 
 		// ready 在 deferred.then 中转化原数据并向后传递. 转化后的对象属性为:
 		// 
@@ -306,7 +317,7 @@
 		// 	return $.Deferred().reject([data])
 		//  
 		if (typeof d.then == 'function') {
-			return d.then(gh.ready)
+			return d.then(this.ready)
 		};
 
 		var data = {
@@ -328,7 +339,7 @@
 		} while (typ != data.type && !data.error && safe < 10 && data.type != "html" && trans[data.type])
 
 		if (safe >= 10) {
-			data.error = "gh.ready: max recursion limit"
+			data.error = "Repo.ready: max recursion limit"
 		}
 
 		if (data.error) {
@@ -339,10 +350,10 @@
 		return data
 	}
 
-	gh.render = function(data) {
+	gh.prototype.render = function(data) {
 		// GoHub 默认渲染, 需要显示调用.
 		// 示例:
-		// 	repo.ready(deferred).done(gh.render)
+		// 	repo.ready(deferred).done(repo.render)
 		// 
 		// render 把 data 渲染到 gh.settings 中 brand,index,content 属性对应的页面位置.
 		// 默认值分别为 css 选择器:
@@ -350,10 +361,6 @@
 		// 调用者可自行配置.
 		// 
 		var cfg = gh.settings
-
-		if (data.brand && cfg.brand) {
-			$(cfg.brand).empty().append(data.brand)
-		}
 
 		if (cfg.index) {
 			gh.list(data)
@@ -384,7 +391,24 @@
 				dl && dl.append($('<dd>').addClass('gh-' + level).append(i))
 			})
 		}
+
+		if (data.brand && cfg.brand) {
+			$(cfg.brand).empty().append(data.brand)
+		}
+
 		if (data.content && cfg.content) {
+			var url = data.url,
+				cdn = this.cdn();
+			if (cdn) {
+				// 只有 readme 的 url 不在 CDN 下.
+				url = url.indexOf(cdn) == 0 ? url.slice(0, -data.filename.length) : cdn;
+				$('img', data.content).each(function(_, el) {
+					var src = $(el).attr('src');
+					if (!src || src.match(/(^\/\/)|:/)) return;
+					$(el).attr('src', url + src)
+				})
+			}
+
 			$(cfg.content).empty().append(data.content)
 		}
 
@@ -407,7 +431,9 @@
 		if (data.index || data.type != 'html') return;
 
 		$(data.content).each(function(i, el) {
-			if (!el.nodeName.match(/^H[123456]$/) || filter && !filter(el)) return;
+			if (!el.nodeName.match(/^H[123456]$/) ||
+				$(el).is('.origin') || filter && !filter(el)) return;
+
 			i = parseInt(el.nodeName.slice(1))
 			if (hx == null) hx = i - 1;
 
