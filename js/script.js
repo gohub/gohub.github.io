@@ -2,13 +2,14 @@
 
 (function($, global) {
 	var gh = global.GoHub,
+		golist, listkey = gh.bare(), // repo golist cache
 		repo = global.repo = gh(), // 当前 repo
 		info, // 当前 repo.info()
 		repos = gh.bare(); // cache
 
 	$(window).on("GoHub:Error:ready", function() {
 		$("#gh-loading").hide();
-		console.error("error",arguments)
+		console.error("error", arguments)
 	})
 
 	$(window).on("GoHub:fail", function() {
@@ -28,14 +29,19 @@
 			highlight: gh.hljs
 		})
 
-		repo.history('/golist.json').done(
+
+		repo.history('/golist.json').done(function(d) {
+			golist = d.raw
+			golist.forEach(function(item) {
+				listkey[item.repo] = 1
+			})
 			$(window).on('click', dispatch)
-		)
+		})
 
 		$(window).on('popstate', function() {
 			repo.history()
 		})
-		$('nav button').click(function(){
+		$('nav button').click(function() {
 			$('.origin').toggleClass('none')
 		})
 	})
@@ -71,7 +77,15 @@
 		if (role == "repo") {
 			setTimeout(function() {
 				gh(href).done(getRepo).done(function() {
-					repo.history('golist.json')
+					repo.history('golist.json').done(function(d) {
+						// 合并 repo
+						if (!$.isArray(d.raw)) return;
+						d.raw.forEach(function(item) {
+							if (listkey[item.repo]) return;
+							listkey[item.repo] = 1
+							golist.push(item)
+						})
+					})
 				})
 			}, 0)
 			return false

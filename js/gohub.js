@@ -539,6 +539,14 @@
 			})
 		})
 
+		// 缩减成员函数前的 "func "
+		gh.list(data)
+		data.index.forEach(function(item){
+			if (item.level==3) {
+				item.text = item.text.slice(5)
+			}
+		})
+
 		function p(decl) {
 			// 使用 P 标签包裹注释, PRE 标签包裹缩进和 ':' 后的段落.
 			var tag, comments, max;

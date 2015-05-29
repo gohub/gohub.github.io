@@ -1,5 +1,7 @@
-.wide80{padding-left: 1rem;}
-
+body{tab-size: 2rem;}
+nav button{background-color: transparent;}
+.wide80{padding:0 1rem;}
+.gh-content{overflow: auto;}
 .gh-content pre{background: #e9e9e9; border-radius: 5px;}
 .gh-content h1,
 .gh-content h2,
@@ -8,7 +10,7 @@
 .gh-content img{max-width: 100%}
 .gh-index {padding-right: 1rem;}
 .gh-index dl{white-space: pre; overflow: auto;}
-
+.gh-index span{color: #666;}
 #gh-loading {
 	width: 100%;
 	height:100%;
@@ -17,9 +19,12 @@
 	background: transparent url("daftpunktocat-thomas.gif") no-repeat center center;
 	background-size: 10rem;
 }
-nav button{background-color: transparent;}
 .none{display: none;}
 .gh-3{text-indent:1rem;}
 .gh-4{text-indent:2rem;}
 .gh-5{text-indent:3rem;}
 .gh-6{text-indent:4rem;}
+
+@media screen and (max-width: 10in) {
+	.responsive .gh-index{display: none;}
+}

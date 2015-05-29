@@ -26,9 +26,11 @@ vertical-align: top;
 .wide80{box-sizing:content-box;}
 
 @media screen and (max-width: 5in) {
-.responsive .wide28,
-.responsive .wide29,
-.responsive [class^="wide3"]{width: 100%;}
+.responsive .wide35,
+.responsive .wide36,
+.responsive .wide37,
+.responsive .wide38,
+.responsive .wide39{width: 100%;}
 }
 
 @media screen and (max-width: 6in) {
