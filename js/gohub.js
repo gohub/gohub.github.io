@@ -206,7 +206,7 @@
 		support = history && history.pushState && history.replaceState &&
 		!global.navigator.userAgent.match(/((iPod|iPhone|iPad).+\bOS\s+[1-4]\D|WebApps\/.+CFNetwork)/);
 
-	history.replaceState(null)
+	history.replaceState(null, '')
 	gh.prototype.history = function(path) {
 		// 调用 repo.show(path), 如果浏览器支持 HTML5 history, 应用 HTML5 history.
 		// 如果 path 已经被 cache, 直接渲染.
@@ -226,10 +226,10 @@
 		url = this.cdn(path)
 		if (cache[url]) {
 			if (path != history.state) {
-				history.pushState(last)
+				history.pushState(last, '')
 			}
 			last = url
-			history.replaceState(last)
+			history.replaceState(last, '')
 			return $.when(this.ready.call({
 				url: url
 			}, cache[url])).done(this.render)
@@ -238,9 +238,9 @@
 		return (path == '/readme' ? this.readme() : this.show(path))
 			.done(function(data) {
 				if (last)
-					history.pushState(last)
+					history.pushState(last, '')
 				last = data.url
-				history.replaceState(last)
+				history.replaceState(last, '')
 				cache[last] = data.raw
 			})
 	}
@@ -249,10 +249,20 @@
 (function($, global) {
 	// GoHub 页面渲染相关
 
+	// http://www.fileformat.info/info/unicode/category/Zs/list.htm
+	// http://www.fileformat.info/info/unicode/category/Po/list.htm
+	// http://www.fileformat.info/info/unicode/category/Ps/list.htm
+	// http://www.fileformat.info/info/unicode/category/Pe/list.htm
+	// http://www.fileformat.info/info/unicode/category/Sm/list.htm
+	// http://www.fileformat.info/info/unicode/category/Sk/list.htm
+
+	// 符号映射规则, 先找到标准名字 name, 依次找 SMALL name, FULLWIDTH name.
+	// 'LINE TABULATION' (U+000B) 用 'FOUR-PER-EM SPACE' (U+2005)
+	// 'SPACE' (U+0020) 用 'THIN SPACE' (U+2009)
 	var gh = global.GoHub,
 		trans = gh.transformer = gh.transformer || gh.bare(),
 		_source = "\t !\"#$%&'()*+,./:;<=>?@[\\]^`{|}~",
-		_target = "﹏░¡″♯＄％＆′﹙﹚×＋，·╱∶；＜＝＞¿＠［╲］∧ˋ﹛¦﹜∽";
+		_target = "  ﹗＂﹟＄﹪﹠＇﹙﹚﹡＋﹐﹒／﹕;‹꞊›﹖﹫［﹨］＾｀﹛｜﹜～";
 
 	gh.settings = gh.bare()
 	gh.settings.index = '.gh-index';
@@ -541,8 +551,8 @@
 
 		// 缩减成员函数前的 "func "
 		gh.list(data)
-		data.index.forEach(function(item){
-			if (item.level==3) {
+		data.index.forEach(function(item) {
+			if (item.level == 3) {
 				item.text = item.text.slice(5)
 			}
 		})
