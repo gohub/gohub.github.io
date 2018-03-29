@@ -126,4 +126,4 @@
 		return false
 	}
 
-})(jQuery, this)
+})(jquery, this)
