@@ -195,7 +195,7 @@
 		return this.ready(this.got(path)).done(this.render)
 	}
 
-})(jQuery, this);
+})(jquery, this);
 
 (function($, global) {
 	// HTML5 history
@@ -244,7 +244,7 @@
 				cache[last] = data.raw
 			})
 	}
-})(jQuery, this);
+})(jquery, this);
 
 (function($, global) {
 	// GoHub 页面渲染相关
@@ -466,7 +466,7 @@
 		data.index = items
 	}
 
-})(jQuery, this);
+})(jquery, this);
 
 (function($, global) {
 	// GoHub 数据转换
@@ -704,7 +704,7 @@
 		})
 	};
 
-})(jQuery, this);
+})(jquery, this);
 
 (function($, global) {
 	// 解析相关
@@ -894,4 +894,4 @@
 		return ret;
 	}
 
-})(jQuery, this);
+})(jquery, this);
