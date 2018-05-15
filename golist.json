@@ -1,10 +1,6 @@
 [
-	{
-		"repo": "golang-china/golangdoc.translations",
-		"description": "Go std 文档"
-	},
-	{
-		"repo": "gohub/google",
-		"description":"Google Go 文档"
-	}
+  {
+    "repo": "golang-china/golangdoc.translations",
+    "synopsis": "Go 标准库中文版"
+  }
 ]
