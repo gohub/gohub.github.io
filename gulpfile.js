@@ -1,6 +1,8 @@
-'use strict';
-var gulp = require('gulp');
-var gls = require('gulp-live-server');
+/* jshint esversion: 6 */
+
+const
+	gulp = require('gulp'),
+	gls = require('gulp-live-server');
 
 gulp.task('default', function() {
 	var server = gls.static('.', 6060);

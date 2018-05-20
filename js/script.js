@@ -1,129 +1,221 @@
-'use strict';
+/* jshint esversion: 6 */
+(function (global) {
 
-(function($, global) {
-	var gh = global.GoHub,
-		golist, listkey = gh.bare(), // repo golist cache
-		repo = global.repo = gh(), // 当前 repo
-		info, // 当前 repo.info()
-		repos = gh.bare(); // cache
+  'use strict';
 
-	$(window).on("GoHub:Error:ready", function() {
-		$("#gh-loading").hide();
-		console.error("error", arguments)
-	})
+  const api = 'https://api.github.com/repos';
+  let cache = {};
+  function getCache(key) {
+    return cache[key];
+  }
 
-	$(window).on("GoHub:fail", function() {
-		$("#gh-loading").hide();
-	})
+  function storeCache(key, val) {
+    cache[key] = val;
+    return val;
+  }
 
-	$(document).ajaxStart(function() {
-		$("#gh-loading").show();
-	});
+  class gohub {
+    constructor(owner, repo) {
+      if (!repo) {
+        owner = owner.split('/');
+        this.owner = owner[0];
+        this.repo = owner[1];
+      } else {
+        this.owner = owner;
+        this.repo = repo;
+      }
+    }
 
-	$(window).on('GoHub:render', function() {
-		$("#gh-loading").hide();
-	});
+    list() {
+      return this.get('contents/golist.json');
+    }
 
-	$(function() {
-		marked.setOptions({
-			highlight: gh.hljs
-		})
+    readme() {
+      return this.get('readme');
+    }
 
+    get(path) {
+      path = `${this.owner}/${this.repo}/${path}`;
+      let data = getCache(path);
+      if (data) return Promise.resolve(data);
 
-		repo.history('/golist.json').done(function(d) {
-			golist = d.raw
-			golist.forEach(function(item) {
-				listkey[item.repo] = 1
-			})
-			$(window).on('click', dispatch)
-		})
+      return fetch(`${api}/${path}`).then(
+        (resp)=>this.normalize(resp)
+      ).catch(data=>{
+        console.log(data);
+        sel('header > code')
+        .textContent = data.statusText + ' ' + data.url;
+        return data;
+      });
+    }
 
-		$(window).on('popstate', function() {
-			repo.history()
-		})
-		$('nav button').click(function() {
-			$('.origin').toggleClass('none')
-		})
-	})
+    normalize(resp) {
+      let
+        owner = this.owner,
+        repo = this.repo,
+        url = resp.url.substring(api.length + 1);
+      if (!resp.ok) return Promise.reject({
+          owner, repo,
+          url,
+          statusText: resp.statusText,
+        });
 
-	function getRepo(rep) {
-		info = rep.info();
-		repos[info.repo] = info
-		global.repo = repo = rep
-	}
+      return resp.json().then(json=> {
+        let
+          path = json.path,
+          ext = (path.match(/\.[a-z0-9]+$/i) || [''])[0].
+            slice(1).toLowerCase(),
+          text = Base64.decode(json.content),
+          content = ext === 'json' &&
+            JSON.parse(text) || text;
 
+        return storeCache(
+          url, {
+            owner, repo,
+            name: json.name,
+            url: json.html_url,
+            sha: json.sha,
+            path,
+            ext,
+            content,
+          }
+        );
+      });
+    }
+  }
 
-	function dispatch(e) {
-		// 派发获取文档请求
-		if (!e.target || e.target.nodeName != 'A') {
-			return
-		};
-		var el = $(e.target),
-			href = el.attr('href');
-		if (!href) return false;
-		if (href[0] == '#' || href.indexOf(':') > 0 || href.slice(0, 2) == '//') {
-			return
-		}
+  global.gohub = function (owner, repo) {
+    if (!owner) return gohub.prototype;
+    return new gohub(owner, repo);
+  };
 
-		// 本地文件以 "/" 开头
-		if (href[0] == '/') {
-			setTimeout(function() {
-				repo.history(href)
-			}, 0)
-			return false
-		}
+  global.all = function (s, node) {
+    return (node || document).querySelectorAll(s);
+  };
 
-		var role = el.attr('role');
-		if (role == "repo") {
-			setTimeout(function() {
-				gh(href).done(getRepo).done(function() {
-					repo.history('golist.json').done(function(d) {
-						// 合并 repo
-						if (!$.isArray(d.raw)) return;
-						d.raw.forEach(function(item) {
-							if (listkey[item.repo]) return;
-							listkey[item.repo] = 1
-							golist.push(item)
-						})
-					})
-				})
-			}, 0)
-			return false
-		}
+  global.sel = function (s, node) {
+    return (node || document).querySelector(s);
+  };
 
-		if (role == "gopackage") {
-			var data, name, base;
-			el = el.parent()
-			while (el.size() && !el.is('h3')) {
-				el = el.prev()
-			}
+  global.on = function (type, listener, useCapture) {
+    let node = this instanceof Node && this || document.body;
+    node.addEventListener(type, listener, useCapture);
+  };
 
-			data = el.data()
-			name = data.repo.split('/')
-			base = name.slice(2).join('/')
-			name = name.slice(0, 2).join('/')
+  global.emit = function (type, detail) {
+    let node = this instanceof Node && this || document.body;
+    node.dispatchEvent(
+      new CustomEvent(type, {detail: detail })
+    );
+  };
 
-			if (!repos[name]) {
-				setTimeout(function() {
-					gh(data.repo).done(getRepofunction).done(function() {
-						repo.history(href + '/' + data.type || 'doc_zh_CN.go')
-					})
-				}, 0)
-				return false
-			}
+  global.is = {
+    array:(v)=>Array.isArray(v),
+    object:(v)=>Object.prototype.toString.call(v) === '[object Object]',
+    string:(v)=>typeof v === 'string',
+  };
 
-			info = repos[name]
-			repo = info.self()
+}(this));
+(function (global) {
+  let tmpl = PowJS(sel('template'));
 
-			if (base != info.base.slice(1, -1)) {
-				repo.base(base)
-			}
-			setTimeout(function() {
-				repo.history(href + '/' + data.type || 'doc_zh_CN.go')
-			}, 0)
-			return false
-		}
-		return false
-	}
+  on.call(sel('#panel'), 'update', (event)=> {
+    tmpl.render(event.detail).removeChilds();
+  });
+  on.call(sel('#panel'), 'click',(event)=> {
+    let target = event.target;
+    if (target.matches('summary')) {
+      if (target.nextElementSibling) return;
+      let repo = target.closest('details').getAttribute('repo');
+      gohub(repo).list().then(data=>tmpl.render(data).removeChilds());
+    }
+  });
+}(this));
+(function (global) {
 
-})(jquery, this)
+  let
+    main = sel('main'),
+    container = sel('#editor-container'),
+    preview = sel('#preview'),
+    editor = CodeMirror(container, {
+      value: 'package "loading readme"',
+      lineNumbers: true,
+      mode: "go",
+      keyMap: "sublime",
+      autoCloseBrackets: true,
+      matchBrackets: true,
+      showCursorWhenSelecting: true,
+      theme: "twilight",
+      tabSize: 2
+    }),
+    split = {};
+
+  ['json','js','go','golang'].forEach(lang=>{
+    let x = hljs.getLanguage(lang);
+    lang= 'lang-'+lang;
+    if (!x.aliases) x.aliases=[];
+    if(x.aliases.indexOf(lang)===-1)
+    x.aliases.push(lang);
+  });
+
+  CodeMirror.modeURL = '//unpkg.com/codemirror@5.37.0/mode/%N/%N.js';
+  CodeMirror.autoLoadMode(editor,'go');
+
+  if (location.hostname !== 'localhost')
+    global.addEventListener('beforeunload', function (e) {
+      e.returnValue = '\o/';
+    });
+
+  let gh = gohub('gohub/gohub.github.io');
+
+  fetch('/README.md?'+Date.now()).then((resp)=>{
+    return resp.text().then((content)=>(
+      {content,ext: 'md',url:'README.md'}
+    )).then(data =>render(data));
+  });
+
+  gh.list().then(data =>render(data));
+
+  function render(data) {
+    let content = data && data.content;
+    if(!content) return;
+
+    if (typeof content !== 'string')
+      return emit.call(sel('#panel'), 'update', data);
+
+    sel('header > code')
+    .textContent = data.url.substring(19)
+    .replace('/blob/master/', '/');
+
+    if(data.ext === 'md') {
+      preview.innerHTML = marked(data.content);
+      main.setAttribute('class','preview');
+      preview.querySelectorAll('pre code[class*=lang-]')
+        .forEach((e)=>hljs.highlightBlock(e));
+    } else {
+      editor.setValue(content);
+      editor.focus();
+      main.setAttribute('class','');
+    }
+  }
+
+  function resizable(selector) {
+    return interact(selector)
+      .rectChecker(function (elm) {
+        return {
+          left: elm.offsetLeft,
+          top: elm.offsetTop,
+          right: elm.offsetLeft + elm.offsetWidth,
+          bottom: elm.offsetLeft + elm.offsetHeight,
+        };
+      })
+      .resizable({
+        edges: { bottom: true },
+        invert: 'reposition',
+        onmove: function (event) {
+          console.log(event);
+        },
+      }).options.resize.edges;
+  }
+
+}(this));

@@ -1,93 +1,89 @@
 # GoHub
 
-[GoHub][] 基于 [Github Pages][] 提供在线 Golang 文档阅读. 特征:
+WIP (尚在开发中...)
 
-  - 便捷的文档项目组织
-  - Go Doc API 翻译双语对照阅读
-  - 渲染 Markdown 或更多编程语言文档
+[GoHub][] 使用 [Github REST API v3][] 提供在线 Golang 文档阅读.
 
-对 GoHub 有任何建议或问题, 请至 GoHub [Wiki][] 和 [Issues][]
+- 便捷的文档项目组织
+- Go Doc API 翻译双语对照阅读
+- 渲染 Markdown 或更多编程语言文档
 
-## 实现基础
+对 GoHub 有任何建议或问题, 请至 [GoHub Wiki][] 和 [Issues][]
 
-得益于 [GitHub API][] 和 [RawGit][], GoHub 项目代码和 Golang 翻译文档项目代码是分离的.
-GoHub 通过 GitHub API 获取项目的 Latest release Tag, 从 RawGit CDN 获取该 Tag 下的文档.
-RawGit CDN 中的数据是静态的, 不提供更新服务. 更新 Latest release Tag 可使 GoHub 展现新的文档.
-对于没有建立 Latest release Tag 的项目, 您可以 fork 后, 在 fork 项目中建立 Latest release Tag.
+## golist.json
 
-## 组织方式
+golist.json 用于组织文档. 支持两种结构:
 
-GoHub 使用文件 golist.json 来组织文档项目. 为简化逻辑使用两种结构.
+- Object 单个文档项目, 多个 Package 组成
+- Array  文档项目列表, 每个项目的地址和说明, 每个项目下必须有 golist.json
 
-Object方式 表示包文档索引:
-全部以 Object 组织, list 为子包列表.
+例: 单个文档项目, 使用 [GoDocu][] 生成.
 
 ```json
 {
-	"std": {
-		"type": "doc_zh_CN.go",
-		"repo": "golang-china/golangdoc.translations/src",
-		"list": {
-			"archive/tar": "tar包实现了tar格式压缩文件的存取.",
-			"archive/zip": "zip包提供了zip档案文件的读写服务."
-		}
-	}
+  "Repo": "github.com/golang/go",
+  "Filename": "doc_zh_CN.go",
+  "Package": [
+    {
+      "Import": "archive/tar",
+      "Synopsis": "tar包实现了tar格式压缩文件的存取.",
+      "Progress": 100,
+    },
+    {
+      "Import": "archive/zip",
+      "Synopsis": "zip包提供了zip档案文件的读写服务.",
+      "Progress": 95,
+    }
+  ],
 }
 ```
 
-数组方式 表示项目索引:
-每个条目都是 GitHub 上得一个项目, repo 下必须含有 golist.json 文件.
-该文件内容可以为包文档索引或者包文档索引.
+例: 文档项目列表, 手工书写
 
 ```json
 [
 	{
 		"repo": "golang-china/golangdoc.translations",
-		"description": "Go std 文档"
-	},
-	{
-		"repo": "gohub/google",
-		"description":"Google Go 文档"
+		"synopsis": "Go 标准库中文版"
 	}
 ]
 ```
 
-GoHub 的 golist.json 为文档源头, repo 所有者通过定义 golist.json 自由拓扑文档关系.
+也就是说 [GoHub][] 的 golist.json 是文档组织的源头, 期望您的文档项目加入.
 
-## Go 标准库
+## 贡献
 
-GoLang 标准库的翻译文档来自 [Golang-China][] 的 [golangdoc.translations][] 项目.
-期待您参与该项目并改善翻译文档.
+GoLang 标准库翻译文档来自 [golangdoc.translations][].
 
-## 致谢
+[Golang-China][] 需要贡献者, 贡献辅助工具代码或翻译文档, 不限于 GoLang 标准库.
 
-GoHub 的设计灵感来自 [FlatDoc][]. Powered by:
+## 依赖
 
-- [jQuery][]  New Wave JavaScript
-- [marked][]  a markdown parser
+Powered by:
+
+- [marked][] a markdown parser
 - [base64.js][] Base64 implementation for JavaScript
-- [highlight.js][] Syntax highlighting for the Web
-- [JingYes][] CSS3 Framework
-
+- [CodeMirror][] In-browser code editor
+- [polyfill.io][] Upgrade the web. Automatically
+- [normalize.css][] A modern alternative to CSS resets
+- [material-design-icons][] Material Design icons by Google
 
 ## LICENSE
 
-Copyright (c) 2015 The GoHub Authors. All rights reserved.
-Use of this source code is governed by a BSD-style license 
+Copyright (c) 2018 The GoHub Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license
 that can be found in the LICENSE file.
 
 [GoHub]: https://github.com/gohub/gohub.github.io
-[Wiki]: https://github.com/gohub/gohub.github.io/wiki
+[GoHub Wiki]: https://github.com/gohub/gohub.github.io/wiki
 [Issues]: https://github.com/gohub/gohub.github.io/issues
-[language-subtag]: http://www.iana.org/assignments/language-subtag-registry/language-subtag-registry
-[Github Pages]: https://pages.github.com
-[GitHub API]: https://developer.github.com
-[RawGit]: http://rawgit.com
 [Golang-China]: https://github.com/golang-china
 [golangdoc.translations]: https://github.com/golang-china/golangdoc.translations
-[FlatDoc]: https://github.com/rstacruz/flatdoc
-[jQuery]: https://github.com/jquery/jquery
+[CodeMirror]: https://github.com/codemirror/CodeMirror
 [marked]: https://github.com/chjj/marked
-[highlight.js]: https://highlightjs.org
 [base64.js]: https://github.com/dankogai/js-base64
-[JingYes]: https://github.com/achun/JingYes
+[polyfill.io]: https://polyfill.io
+[GoDocu]: https://github.com/golang-china/godocu
+[normalize.css]: https://github.com/necolas/normalize.css
+[material-design-icons]: https://github.com/google/material-design-icons
+[Github REST API v3]: https://developer.github.com/v3/
