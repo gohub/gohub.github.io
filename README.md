@@ -65,8 +65,11 @@ Powered by:
 - [base64.js][] Base64 implementation for JavaScript
 - [CodeMirror][] In-browser code editor
 - [polyfill.io][] Upgrade the web. Automatically
+- [highlight.js][] Javascript syntax highlighter
 - [normalize.css][] A modern alternative to CSS resets
-- [material-design-icons][] Material Design icons by Google
+- [code-mirror-themes][] A large collection of Code Mirror themes for your coding pleasure
+- [github-markdown-css][] The minimal amount of CSS to replicate the GitHub Markdown style
+- [PowJS][] Power ECMAScript 6 Template Engine DOM tree based
 
 ## LICENSE
 
@@ -85,5 +88,8 @@ that can be found in the LICENSE file.
 [polyfill.io]: https://polyfill.io
 [GoDocu]: https://github.com/golang-china/godocu
 [normalize.css]: https://github.com/necolas/normalize.css
-[material-design-icons]: https://github.com/google/material-design-icons
+[code-mirror-themes]: https://github.com/FarhadG/code-mirror-themes
 [Github REST API v3]: https://developer.github.com/v3/
+[PowJS]: https://github.com/powjs/powjs
+[highlight.js]: https://github.com/isagalaev/highlight.js
+[github-markdown-css]: https://github.com/sindresorhus/github-markdown-css
