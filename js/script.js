@@ -37,7 +37,7 @@
     get(path) {
       path = `${this.owner}/${this.repo}/${path}`;
       let data = getCache(path);
-      if (data) return Promise.resolve(data);
+      if (data) return Promise.resolve(data).then(dispatch);
 
       return fetch(`${api}/${path}`).then(
         (resp)=>this.normalize(resp)
@@ -46,7 +46,7 @@
           new CustomEvent('gohub-catch', {detail: data })
         );
         return data;
-      });
+      }).then(dispatch);
     }
 
     normalize(resp) {
@@ -67,24 +67,28 @@
             slice(1).toLowerCase(),
           text = Base64.decode(json.content),
           content = ext === 'json' &&
-            JSON.parse(text) || text,
-          data = storeCache(
-            url, {
-              owner, repo,
-              name: json.name,
-              url: json.html_url,
-              sha: json.sha,
-              path,
-              ext,
-              content,
-            }
-          );
-        document.dispatchEvent(
-          new CustomEvent('gohub-got', {detail: data })
+            JSON.parse(text) || text;
+
+        return storeCache(
+          url, {
+            owner, repo,
+            name: json.name,
+            url: json.html_url,
+            sha: json.sha,
+            path,
+            ext,
+            content,
+          }
         );
-        return data;
       });
     }
+  }
+
+  function dispatch(data) {
+    document.dispatchEvent(
+      new CustomEvent('gohub-got', {detail: data })
+    );
+    return data;
   }
 
   global.gohub = function (owner, repo) {
